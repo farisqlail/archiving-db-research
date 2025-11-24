@@ -21,78 +21,95 @@
   <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
   [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
-## Description
+## Archiving DB
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Prasyarat
 
-## Project setup
+- Node.js `>= 20`
+- MySQL berjalan di `127.0.0.1:3306` atau sesuai konfigurasi
+- Akses user database (default: `root`, tanpa password)
 
-```bash
-$ npm install
-```
-
-## Compile and run the project
+## Instalasi
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm install
 ```
 
-## Run tests
+## Konfigurasi
+
+Gunakan file `.env` di root.
+
+```env
+DB_HOST=127.0.0.1
+DB_USER=root
+DB_PASSWORD=
+DB_PORT=3306
+DB1_NAME=db1
+DB2_NAME=db2
+ARCHIVE_CRON=*/2 * * * *
+PORT=3001
+```
+
+- `DB1_NAME` dan `DB2_NAME`: nama database sumber dan tujuan di server MySQL yang sama
+- `ARCHIVE_CRON`: ekspresi cron. Contoh setiap 2 menit `*/2 * * * *` atau `0 */2 * * * *` (tiap 2 menit di detik ke‑0)
+- `PORT`: port HTTP aplikasi
+
+## Menjalankan
 
 ```bash
-# unit tests
-$ npm run test
+# mode pengembangan (watch)
+npm run start:dev
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+# mode produksi
+npm run build
+npm run start:prod
 ```
 
-## Deployment
+Aplikasi akan expose endpoint HTTP di `http://localhost:<PORT>`.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## API
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+- `GET /archive/run`: menjalankan proses archiving secara manual saat itu juga
+  - Respons JSON contoh:
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```json
+{
+  "tables": ["users", "orders"],
+  "inserted": {
+    "users": 10,
+    "orders": 25
+  }
+}
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Cara Kerja Archiving
 
-## Resources
+- Membuat database tujuan jika belum ada: `CREATE DATABASE IF NOT EXISTS db2`
+- Untuk setiap tabel “BASE TABLE” di `db1`:
+  - Membuat struktur tabel: `CREATE TABLE IF NOT EXISTS db2.t LIKE db1.t`
+  - Menyalin data: `INSERT IGNORE INTO db2.t SELECT * FROM db1.t`
+- `INSERT IGNORE` mencegah duplikasi jika primary key sama; jika data sudah ada, jumlah `inserted` bisa `0`
 
-Check out a few resources that may come in handy when working with NestJS:
+## Penjadwalan
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+- Job dijalankan otomatis sesuai `ARCHIVE_CRON` melalui dekorator `@Cron(...)`
+- Ubah nilai di `.env` dan restart aplikasi agar jadwal baru aktif
 
-## Support
+## Troubleshooting
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+- Port terpakai (`EADDRINUSE`): ubah `PORT` di `.env` (misal `3001`) dan restart
+- Kredensial salah: pastikan `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_PORT` sesuai
+- Tidak ada tabel: pastikan `db1` punya tabel “BASE TABLE” (bukan hanya view)
+- Baris tak bertambah: kemungkinan semua baris sudah ada di `db2` sehingga `INSERT IGNORE` tidak menambah apa pun
+- Data besar: untuk tabel sangat besar, pertimbangkan strategi incremental (berdasarkan `updated_at`/`id` terakhir) atau batching
 
-## Stay in touch
+## Struktur Proyek
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- `src/modules/archiving/`: service, controller, dan module untuk archiving
+- `src/modules/database/`: module global penyedia koneksi MySQL (`MYSQL_POOL`)
+- `src/app.module.ts`: modul root yang mengimpor `ScheduleModule`, `DatabaseModule`, dan `ArchivingModule`
+- `src/main.ts`: entry‑point, memuat `.env` dan menjalankan aplikasi
 
-## License
+## Lisensi
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- Proyek ini bertanda `UNLICENSED` sesuai `package.json`.
