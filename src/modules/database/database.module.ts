@@ -14,6 +14,9 @@ const mysqlPoolProvider = {
       connectionLimit: 10,
       queueLimit: 0,
       multipleStatements: true,
+      ssl: {
+        rejectUnauthorized: false,
+      },
     });
     return pool;
   },
